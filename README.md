@@ -120,8 +120,8 @@ ruff check .                             # static analysis
 PYTHONPATH=src/python python -m pqc_gateway.cli --help
 ```
 
-> The harness `bench` command is implemented in week 3 of the plan (see §6);
-> until then it raises an explicit `NotImplementedError`.
+> The harness `bench` command is not implemented yet: it raises an explicit
+> `NotImplementedError` (see `docs/methodology.md`).
 
 ---
 
@@ -178,7 +178,7 @@ published as an artifact or release asset, to keep the commit history clean.
 In addition:
 
 - **`main` branch protection:** every change goes through a Pull Request with
-  **1 required approval**; no *force-push*, no branch deletion (see §8).
+  **1 required approval**; no *force-push*, no branch deletion (see §7).
 - **Manual semantic versioning** with `vX.Y.Z` tags and release notes.
 - **Documentation** planned with MkDocs + Material published on GitHub Pages.
 - Honest limitations: Trivy/Syft do not replace a professional audit; Gitleaks
@@ -187,28 +187,7 @@ In addition:
 
 ---
 
-## 6. Work plan (10-week summary)
-
-| Week | Goal | Evidence in the repository |
-|---|---|---|
-| 1 | Build OpenSSL3 + liboqs + oqs-provider locally and in Docker | `docker/Dockerfile.gateway`, ADR-0001 |
-| 2 | `X25519MLKEM768` handshake server↔client | connection test, anonymised Wireshark capture |
-| 3 | Benchmarking harness v1 (time/bytes, warm-up, repetitions) | `benchmarks/scripts`, first CSV, `docs/methodology.md` |
-| 4 | Basic CI green | `.github/workflows/ci.yml`, badge in this README |
-| 5 | Orchestrated containerisation | `docker/docker-compose.yml`, end-to-end test |
-| 6 | Benchmarking extended to multiple groups | updated notebook, documented limitations |
-| 7 | Static analysis and dependencies | `bandit`/`ruff`/`cppcheck`/`pip-audit` in CI |
-| 8 | SBOM, container and secret scanning | Syft + Trivy + Gitleaks, `sbom/` |
-| 9 | Artifact signing and documentation | keyless cosign, MkDocs on Pages |
-| 10 | Closure, reproducibility and demo | `v1.0` release + 5–8 min demo |
-
-Kubernetes, cross-implementation interoperability (wolfSSL) and ML-DSA
-signatures in the certificate chain remain an **optional extension**, outside
-these 10 weeks.
-
----
-
-## 7. Security and limitations
+## 6. Security and limitations
 
 Read [`SECURITY.md`](SECURITY.md) and `docs/architecture.md` before using or
 citing any result. Summary:
@@ -225,7 +204,7 @@ citing any result. Summary:
 
 ---
 
-## 8. Branches and review
+## 7. Branches and review
 
 The **`main` branch is protected** on GitHub:
 
@@ -238,7 +217,7 @@ require mandatory review as described in `CONTRIBUTING.md`.
 
 ---
 
-## 9. Citing this project
+## 8. Citing this project
 
 ```bibtex
 @software{pqc_gateway_2026,
@@ -252,7 +231,7 @@ require mandatory review as described in `CONTRIBUTING.md`.
 
 Full metadata in [`CITATION.cff`](CITATION.cff).
 
-## 10. License
+## 9. License
 
 [MIT](LICENSE) — © 2026 Frank Ernesto Acosta Fonseca.
 
