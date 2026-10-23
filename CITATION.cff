@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, its data or its methodology, please cite it
+  as shown below.
+type: software
+title: "PQC-Gateway: hybrid classical post-quantum TLS 1.3 gateway with benchmarking and DevSecOps"
+version: 0.1.0
+date-released: 2026-10-23
+license: MIT
+repository-code: "https://github.com/acostacrypto/pqc-gateway"
+abstract: >-
+  Prototype of a TLS 1.3 gateway negotiating the X25519MLKEM768 hybrid group
+  (X25519 + ML-KEM-768) on OpenSSL 3 with oqs-provider, together with a
+  reproducible benchmarking harness for handshake overhead and a DevSecOps
+  pipeline (SBOM, artifact signing, vulnerability and secret scanning).
+  Local, educational experimental study; not intended for production.
+keywords:
+  - "post-quantum cryptography"
+  - "TLS 1.3"
+  - "ML-KEM"
+  - "hybrid key exchange"
+  - "DevSecOps"
+  - "reproducibility"
+  - "benchmarking"
+authors:
+  - family-names: "Acosta Fonseca"
+    given-names: "Frank Ernesto"

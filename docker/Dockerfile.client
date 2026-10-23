@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+###############################################################################
+#  TEST CLIENT image (Python + OpenSSL 3/liboqs/oqs-provider)
+#
+#  Inherits the PQC base image built by docker/Dockerfile.gateway, so client
+#  and gateway share the EXACT same compiled stack (controlled experimental
+#  variable: same OpenSSL, same libraries).
+#
+#  Required previous build (docker-compose.yml also honours it via depends_on):
+#     docker build -f docker/Dockerfile.gateway -t pqc-gateway:base .
+#
+#  Build:  docker build -f docker/Dockerfile.client -t pqc-gateway-client:local .
+#  Run:    docker run --rm -it pqc-gateway-client:local
+###############################################################################
+
+ARG BASE_IMAGE=pqc-gateway:base
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Python 3 for the harness. No pip at runtime: the MVP harness is standard
+# library only (keeps the image small and the SBOM clean).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Harness code + tooling configuration
+COPY src/python ./src/python
+COPY pyproject.toml ./
+
+ENV PYTHONPATH=/app/src/python
+
+# Build-time verification: the inherited image must still expose OpenSSL 3
+# with the PQC provider loaded (the build fails otherwise).
+RUN openssl version \
+    && openssl list -providers \
+    && python3 --version
+
+CMD ["python3", "-m", "pqc_gateway.cli", "--help"]

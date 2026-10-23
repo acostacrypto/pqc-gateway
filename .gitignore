@@ -1,0 +1,107 @@
+# =============================================================================
+#  pqc-gateway — .gitignore
+#  Coverage: Python · C/C++ · Docker · secrets · CI-generated outputs
+# =============================================================================
+
+# --------------------------------- Python ------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.ipynb_checkpoints/
+jupyter/.ipynb_checkpoints/
+
+# --------------------------------- C / C++ -----------------------------------
+# Objects, libraries and binaries
+*.o
+*.obj
+*.a
+*.la
+*.lo
+*.s
+*.gch
+*.pch
+*.gcno
+*.gcda
+*.gcov
+*.out
+*.exe
+*.dll
+*.dylib
+*.so.*
+*.mod
+
+# Build systems and tooling
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.txt
+install_manifest.txt
+compile_commands.json
+compile_flags.txt
+.cache/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --------------------------------- Docker ------------------------------------
+*.tar
+*.tar.gz
+docker-compose.override.yml
+.docker/
+
+# -------------------- Secrets and cryptographic material ----------------------
+# Hard rule of this project: demo certificates/keys are generated at build (or
+# container start-up) time and are NEVER committed.
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.der
+certs/
+secrets/
+
+# --------------- CI-generated outputs (published as artifacts) ---------------
+# Repository rule: only documents are versioned; the deterministic tool outputs
+# (Syft/Trivy/benchmarking) are published as CI artifacts or release assets.
+sbom/*
+!sbom/README.md
+security-reports/*
+!security-reports/README.md
+benchmarks/results/*
+!benchmarks/results/README.md
+
+# --------------------------------- Notebooks ---------------------------------
+# Heavy outputs (exported HTML, executed notebooks) are not versioned.
+notebooks/*.html
+notebooks/*.nbconvert.ipynb

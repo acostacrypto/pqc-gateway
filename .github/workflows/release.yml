@@ -1,0 +1,89 @@
+name: Release
+
+# Manual semantic release: git tag vX.Y.Z on main → image published to GHCR,
+# SBOM, keyless signing with cosign (GitHub Actions OIDC) and GitHub Release.
+#
+#   git tag -a v1.0.0 -m "v1.0.0"
+#   git push origin v1.0.0
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the release
+  packages: write # publish to GHCR
+  id-token: write # keyless signing (cosign/OIDC)
+
+jobs:
+  release:
+    name: Build + SBOM + signing + release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and publish the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.gateway
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=pqc-gateway
+          cache-to: type=gha,mode=max,scope=pqc-gateway
+
+      - name: Pull the image for SBOM and signing
+        run: docker pull "ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}"
+
+      - name: Image SBOM (Syft, CycloneDX)
+        run: |
+          mkdir -p sbom
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            anchore/syft:latest "ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}" \
+            -o cyclonedx-json=sbom/pqc-gateway-image.cdx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Keyless signing (cosign / Sigstore)
+        run: |
+          cosign sign --yes \
+            "ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}"
+
+      - name: Signature verification (own verification step)
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}"
+
+      - name: Create GitHub Release with the SBOM attached
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "PQC-Gateway ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            sbom/pqc-gateway-image.cdx.json \
+          || gh release upload "${GITHUB_REF_NAME}" \
+            sbom/pqc-gateway-image.cdx.json --clobber

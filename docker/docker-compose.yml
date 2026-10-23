@@ -1,0 +1,60 @@
+# Local orchestration of PQC-Gateway (Docker Compose v2).
+#
+# Run from the REPOSITORY ROOT:
+#   docker build -f docker/Dockerfile.gateway -t pqc-gateway:base .
+#   docker compose -f docker/docker-compose.yml up --build
+#   docker compose -f docker/docker-compose.yml exec gateway openssl list -providers
+#   docker compose -f docker/docker-compose.yml down
+#
+# Build order note: the client inherits the base image (pqc-gateway:base)
+# built by Dockerfile.gateway; `depends_on` makes compose build the gateway
+# first. If the client build fails because the image does not exist, run the
+# `docker build` on line 1.
+
+name: pqc-gateway
+
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+    image: pqc-gateway:base
+    container_name: pqc-gateway
+    # TODO(week 2): hybrid TLS server (openssl s_server or nginx) with a
+    # self-signed certificate generated at start-up — never versioned.
+    # Until then the container stays on standby for manual inspection:
+    #   docker compose exec gateway openssl list -providers
+    #   docker compose exec gateway openssl list -tls-groups -tls1_3
+    command: ["sleep", "infinity"]
+    ports:
+      # Reserved for the hybrid TLS server; no listener until week 2.
+      - "4433:4433"
+    networks:
+      - pqc-net
+    healthcheck:
+      test: ["CMD", "openssl", "list", "-providers"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+    image: pqc-gateway-client:local
+    container_name: pqc-gateway-client
+    depends_on:
+      - gateway
+    # The harness is launched manually, for example:
+    #   docker compose exec client python3 -m pqc_gateway.cli --help
+    command: ["sleep", "infinity"]
+    networks:
+      - pqc-net
+
+# Shared gateway↔client network. The simulated backend (week 5) will be added
+# on an ADDITIONAL network marked as `internal: true`, so that only the
+# gateway can reach it and no service exposes ports to the host by accident.
+networks:
+  pqc-net:
+    driver: bridge

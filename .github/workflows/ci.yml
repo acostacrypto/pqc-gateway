@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Static analysis: ruff (Python), bandit (security), cppcheck (C/C++)
+  # ---------------------------------------------------------------------------
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install tooling
+        run: python -m pip install --upgrade ruff bandit
+
+      - name: Ruff (Python lint)
+        run: ruff check .
+
+      - name: Bandit (Python static security analysis)
+        # -ll/-ii: fails only on findings with severity and confidence >= medium
+        run: bandit -r src/python -ll -ii
+
+      - name: cppcheck (C/C++, only if there is source code)
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=(src/cpp/**/*.c src/cpp/**/*.cc src/cpp/**/*.cpp src/cpp/**/*.cxx
+                 src/cpp/**/*.h src/cpp/**/*.hpp)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::notice::No C/C++ sources in src/cpp: skipping cppcheck."
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+          cppcheck --enable=warning,performance,portability \
+                   --error-exitcode=1 --inline-suppr "${files[@]}"
+
+  # ---------------------------------------------------------------------------
+  # 2) Unit tests (end-to-end integration tests arrive in week 5)
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install development dependencies
+        run: python -m pip install --upgrade ".[dev]"
+
+      - name: pytest
+        run: pytest -v
+
+  # ---------------------------------------------------------------------------
+  # 3) Docker image: reproducible build + smoke test + Trivy + SBOM
+  #    (OpenSSL 3 + liboqs + oqs-provider built from source)
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Docker image (build + scan + SBOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.gateway
+          tags: pqc-gateway:ci
+          load: true
+          # Cache shared with security.yml (identical scope) so OpenSSL/liboqs
+          # are not recompiled on every run.
+          cache-from: type=gha,scope=pqc-gateway
+          cache-to: type=gha,mode=max,scope=pqc-gateway
+
+      - name: Smoke test — PQC provider loaded in the image
+        run: |
+          docker run --rm pqc-gateway:ci sh -c '
+            openssl version &&
+            openssl list -providers &&
+            openssl genpkey -algorithm ML-KEM-768 -out /tmp/k.pem &&
+            rm -f /tmp/k.pem
+          '
+
+      - name: Image vulnerability scan (Trivy)
+        # exit-code 0 for now: the scan reports but does not block until the
+        # base image is triaged (weeks 7-8 goal: block on CRITICAL).
+        run: |
+          mkdir -p security-reports
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image \
+            --severity HIGH,CRITICAL --exit-code 0 --format table \
+            pqc-gateway:ci | tee security-reports/trivy-image.txt
+
+      - name: Image SBOM (Syft, CycloneDX)
+        run: |
+          mkdir -p sbom
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            anchore/syft:latest pqc-gateway:ci \
+            -o cyclonedx-json=sbom/pqc-gateway-image.cdx.json
+
+      - name: Publish artifacts (SBOM + reports)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-and-security-reports
+          path: |
+            sbom/
+            security-reports/
+          retention-days: 30

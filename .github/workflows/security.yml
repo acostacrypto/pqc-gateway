@@ -1,0 +1,102 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, to catch vulnerabilities published after the last push
+    - cron: "27 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Secrets (Gitleaks): full history on push, PR diff on pull requests
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: Gitleaks (secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 2) Python code (bandit) + dependencies (pip-audit)
+  # ---------------------------------------------------------------------------
+  python-security:
+    name: Bandit + pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install tooling
+        run: python -m pip install --upgrade ".[dev]"
+
+      - name: Bandit (Python static security analysis)
+        run: bandit -r src/python -ll -ii
+
+      - name: pip-audit (dependencies)
+        run: |
+          mkdir -p security-reports
+          pip freeze \
+            | grep -viE '^(pip|setuptools|wheel|pqc-gateway)' \
+            > security-reports/requirements-ci.txt
+          pip-audit -r security-reports/requirements-ci.txt \
+            --format markdown --output security-reports/pip-audit.md
+
+      - name: Publish reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-security-reports
+          path: security-reports/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # 3) Repository surface: vulnerabilities and misconfigurations
+  #    (uses the SAME build cache as ci.yml to avoid rebuilding the stack)
+  # ---------------------------------------------------------------------------
+  filesystem-scan:
+    name: Trivy fs (dependencies / misconfig)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Repository scan (Trivy fs)
+        run: |
+          mkdir -p security-reports
+          docker run --rm \
+            -v "${{ github.workspace }}:/src:ro" \
+            aquasec/trivy:latest fs \
+            --severity HIGH,CRITICAL --exit-code 0 --format table \
+            /src | tee security-reports/trivy-fs.txt
+
+      - name: Publish reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-report
+          path: security-reports/
+          retention-days: 30
